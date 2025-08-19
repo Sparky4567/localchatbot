@@ -4,3 +4,5 @@ uv sync
 ollama pull llama3.1
 ollama pull nomic-embed-text
 python main.py
+
+"uv run main.py" from main chatbot folder
