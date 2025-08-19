@@ -1,0 +1,6 @@
+cd chatbot
+uv sync
+# make sure Ollama is installed and running, then:
+ollama pull llama3.1
+ollama pull nomic-embed-text
+python main.py

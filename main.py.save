@@ -1,0 +1,67 @@
+from __future__ import annotations
+import os
+import time
+from typing import List
+
+from langchain_community.llms import Ollama
+from langchain_community.embeddings import OllamaEmbeddings
+
+from models.healthcheck import ensure_models
+from memory.semantic import SemanticMemory
+from memory.chrono import ChronoMemory
+from memory.manager import MemoryManager
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+CHAT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
+MBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+
+VECTOR_DIR = os.getenv("VECTOR_DIR", "vector_store")
+SQLITE_PATH = os.getenv("SQLITE_PATH", "chat.db")
+
+LAST_N = int(os.getenv("LAST_N", "6"))
+TOP_K = int(os.getenv("TOP_K", "5"))
+
+def make_prompt(context: str, user_msg: str) -> str:
+    return (
+        "You are Valerian, a helpful local assistant. Be concise.
+"
+        "Use the CONTEXT if useful.
+"
+        f"CONTEXT:\n{context}\n\n"
+        f"User: {user_msg}\nAssistant:"
+    )
+
+def main() -> None:
+    ensure_models(base_url=OLLAMA_BASE_URL, chat_model=CHAT_MODEL, embed_model=EMBED_MODEL, verbose=True)
+
+    llm = Ollama(model=CHAT_MODEL, base_url=OLLAMA_BASE_URL)
+    embedder = OllamaEmbeddings(model=EMBED_MODEL, base_url=OLLAMA_BASE_URL)
+
+    sem = SemanticMemory(embedder=embedder, store_dir=VECTOR_DIR)
+    chrono = ChronoMemory(db_path=SQLITE_PATH)
+    manager = MemoryManager(semantic=sem, chrono=chrono, last_n=LAST_N, top_k=TOP_K)
+
+    print("🤖 Chatbot ready. Type 'exit' to quit.")
+    while True:
+        try:
+            user = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n👋 Goodbye!")
+            break
+
+        if user.lower() in {"exit", "quit"}:
+            print("👋 Goodbye!")
+            break
+
+        chrono.add_message("user", user)
+        sem.add(user)
+
+        context = manager.build_context(user)
+        prompt = make_prompt(context, user)
+        reply = llm.invoke(prompt)
+
+        print(f"Valerian: {reply}")
+        chrono.add_message("assistant", str(reply))
+
+if __name__ == "__main__":
+    main()
